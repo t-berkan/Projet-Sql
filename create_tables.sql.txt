@@ -1,0 +1,286 @@
+CREATE TABLE STATION (
+    id_station SERIAL PRIMARY KEY,
+    nom_station VARCHAR(100) NOT NULL,
+    adresse VARCHAR(200) NOT NULL,
+    ville VARCHAR(50) NOT NULL,
+    code_postal VARCHAR(10) NOT NULL,
+    latitude DECIMAL(10,8) NOT NULL,
+    longitude DECIMAL(11,8) NOT NULL,
+    capacite_totale INTEGER NOT NULL CHECK (capacite_totale > 0),
+    nombre_bornes INTEGER NOT NULL DEFAULT 0 CHECK (nombre_bornes >= 0)
+);
+
+CREATE TABLE VEHICULE (
+    id_vehicule SERIAL PRIMARY KEY,
+    type_vehicule VARCHAR(20) NOT NULL CHECK (type_vehicule IN ('voiture', 'trottinette', 'scooter', 'velo')),
+    marque VARCHAR(50) NOT NULL,
+    modele VARCHAR(50) NOT NULL,
+    immatriculation VARCHAR(20) UNIQUE NOT NULL,
+    statut VARCHAR(20) NOT NULL DEFAULT 'disponible' CHECK (statut IN ('disponible', 'en_location', 'en_maintenance', 'en_charge')),
+    autonomie_km INTEGER NOT NULL CHECK (autonomie_km > 0),
+    niveau_batterie INTEGER NOT NULL DEFAULT 100 CHECK (niveau_batterie >= 0 AND niveau_batterie <= 100),
+    date_mise_service DATE NOT NULL,
+    id_station_actuelle INTEGER,
+    FOREIGN KEY (id_station_actuelle) REFERENCES STATION(id_station) ON DELETE SET NULL
+);
+
+CREATE TABLE BORNE_RECHARGE (
+    id_borne SERIAL PRIMARY KEY,
+    id_station INTEGER NOT NULL,
+    numero_borne VARCHAR(10) NOT NULL,
+    type_prise VARCHAR(30) NOT NULL,
+    puissance_kw DECIMAL(5,2) NOT NULL CHECK (puissance_kw > 0),
+    statut VARCHAR(20) NOT NULL DEFAULT 'disponible' CHECK (statut IN ('disponible', 'occupee', 'hors_service')),
+    FOREIGN KEY (id_station) REFERENCES STATION(id_station) ON DELETE CASCADE,
+    UNIQUE(id_station, numero_borne)
+);
+
+CREATE TABLE CLIENT (
+    id_client SERIAL PRIMARY KEY,
+    nom VARCHAR(50) NOT NULL,
+    prenom VARCHAR(50) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    telephone VARCHAR(20) NOT NULL,
+    date_inscription DATE NOT NULL DEFAULT CURRENT_DATE,
+    date_naissance DATE NOT NULL,
+    numero_permis VARCHAR(30) UNIQUE,
+    statut_compte VARCHAR(20) NOT NULL DEFAULT 'actif' CHECK (statut_compte IN ('actif', 'suspendu', 'inactif')),
+    CHECK (date_naissance < CURRENT_DATE)
+);
+
+CREATE TABLE TECHNICIEN (
+    id_technicien SERIAL PRIMARY KEY,
+    nom VARCHAR(50) NOT NULL,
+    prenom VARCHAR(50) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    telephone VARCHAR(20) NOT NULL,
+    specialite VARCHAR(50) NOT NULL,
+    date_embauche DATE NOT NULL,
+    CHECK (date_embauche <= CURRENT_DATE)
+);
+
+CREATE TABLE LOCATION (
+    id_location SERIAL PRIMARY KEY,
+    id_client INTEGER NOT NULL,
+    id_vehicule INTEGER NOT NULL,
+    id_station_depart INTEGER NOT NULL,
+    id_station_retour INTEGER,
+    date_debut TIMESTAMP NOT NULL,
+    date_fin_prevue TIMESTAMP NOT NULL,
+    date_fin_reelle TIMESTAMP,
+    km_parcourus DECIMAL(8,2) CHECK (km_parcourus >= 0),
+    statut_location VARCHAR(20) NOT NULL DEFAULT 'en_cours' CHECK (statut_location IN ('en_cours', 'terminee', 'annulee')),
+    FOREIGN KEY (id_client) REFERENCES CLIENT(id_client),
+    FOREIGN KEY (id_vehicule) REFERENCES VEHICULE(id_vehicule),
+    FOREIGN KEY (id_station_depart) REFERENCES STATION(id_station),
+    FOREIGN KEY (id_station_retour) REFERENCES STATION(id_station),
+    CHECK (date_fin_prevue > date_debut),
+    CHECK (date_fin_reelle IS NULL OR date_fin_reelle >= date_debut)
+);
+
+CREATE TABLE PAIEMENT (
+    id_paiement SERIAL PRIMARY KEY,
+    id_location INTEGER NOT NULL,
+    montant DECIMAL(10,2) NOT NULL CHECK (montant > 0),
+    date_paiement TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    mode_paiement VARCHAR(30) NOT NULL CHECK (mode_paiement IN ('carte_bancaire', 'paypal', 'apple_pay', 'google_pay')),
+    statut_paiement VARCHAR(20) NOT NULL DEFAULT 'en_attente' CHECK (statut_paiement IN ('en_attente', 'valide', 'refuse', 'rembourse')),
+    FOREIGN KEY (id_location) REFERENCES LOCATION(id_location) ON DELETE CASCADE
+);
+
+CREATE TABLE MAINTENANCE (
+    id_maintenance SERIAL PRIMARY KEY,
+    id_vehicule INTEGER NOT NULL,
+    id_technicien INTEGER NOT NULL,
+    date_debut TIMESTAMP NOT NULL,
+    date_fin TIMESTAMP,
+    type_intervention VARCHAR(50) NOT NULL,
+    description TEXT NOT NULL,
+    cout DECIMAL(10,2) CHECK (cout >= 0),
+    statut_maintenance VARCHAR(20) NOT NULL DEFAULT 'en_cours' CHECK (statut_maintenance IN ('en_cours', 'terminee', 'en_attente_pieces')),
+    FOREIGN KEY (id_vehicule) REFERENCES VEHICULE(id_vehicule),
+    FOREIGN KEY (id_technicien) REFERENCES TECHNICIEN(id_technicien),
+    CHECK (date_fin IS NULL OR date_fin >= date_debut)
+);
+
+CREATE INDEX idx_vehicule_statut ON VEHICULE(statut);
+CREATE INDEX idx_vehicule_station ON VEHICULE(id_station_actuelle);
+CREATE INDEX idx_vehicule_type ON VEHICULE(type_vehicule);
+CREATE INDEX idx_location_client ON LOCATION(id_client);
+CREATE INDEX idx_location_vehicule ON LOCATION(id_vehicule);
+CREATE INDEX idx_location_statut ON LOCATION(statut_location);
+CREATE INDEX idx_paiement_location ON PAIEMENT(id_location);
+CREATE INDEX idx_maintenance_vehicule ON MAINTENANCE(id_vehicule);
+
+-- ============================================================
+-- PARTIE 2 : INSERTION DES DONNÉES
+-- ============================================================
+
+-- STATIONS
+INSERT INTO STATION (nom_station, adresse, ville, code_postal, latitude, longitude, capacite_totale, nombre_bornes) VALUES
+('Station Paris Centre', '15 Avenue des Champs-Élysées', 'Paris', '75008', 48.8698, 2.3078, 50, 0),
+('Station Lyon Part-Dieu', '10 Place Charles Béraudier', 'Lyon', '69003', 45.7606, 4.8562, 40, 0),
+('Station Marseille Vieux-Port', '1 Quai de Rive Neuve', 'Marseille', '13007', 43.2929, 5.3697, 35, 0),
+('Station Toulouse Capitole', '5 Place du Capitole', 'Toulouse', '31000', 43.6042, 1.4442, 30, 0),
+('Station Nice Promenade', '20 Promenade des Anglais', 'Nice', '06000', 43.6952, 7.2663, 25, 0),
+('Station Nantes Commerce', '2 Place du Commerce', 'Nantes', '44000', 47.2125, -1.5609, 30, 0),
+('Station Strasbourg Centre', '10 Place Kléber', 'Strasbourg', '67000', 48.5839, 7.7455, 25, 0),
+('Station Montpellier Antigone', '15 Esplanade de l''Europe', 'Montpellier', '34000', 43.6108, 3.8767, 28, 0),
+('Station Bordeaux Quinconces', '1 Place des Quinconces', 'Bordeaux', '33000', 44.8404, -0.5733, 32, 0),
+('Station Lille Grand Place', '5 Place du Général de Gaulle', 'Lille', '59000', 50.6369, 3.0634, 30, 0);
+
+-- BORNES
+INSERT INTO BORNE_RECHARGE (id_station, numero_borne, type_prise, puissance_kw, statut) VALUES
+(1, 'P-B01', 'Type 2', 22.00, 'disponible'),
+(1, 'P-B02', 'CCS', 50.00, 'disponible'),
+(2, 'L-B01', 'Type 2', 22.00, 'disponible'),
+(2, 'L-B02', 'CCS', 50.00, 'disponible'),
+(3, 'M-B01', 'Type 2', 22.00, 'disponible'),
+(4, 'T-B01', 'CCS', 50.00, 'disponible');
+
+-- CLIENTS
+INSERT INTO CLIENT (nom, prenom, email, telephone, date_inscription, date_naissance, numero_permis, statut_compte) VALUES
+('Dupont', 'Jean', 'jean.dupont@email.com', '+33612345678', '2024-01-10', '1990-05-15', 'FR-123456789', 'actif'),
+('Martin', 'Sophie', 'sophie.martin@email.com', '+33623456789', '2024-01-15', '1988-08-22', 'FR-234567890', 'actif'),
+('Bernard', 'Lucas', 'lucas.bernard@email.com', '+33634567890', '2024-02-01', '1995-03-10', 'FR-345678901', 'actif'),
+('Dubois', 'Emma', 'emma.dubois@email.com', '+33645678901', '2024-02-10', '1992-11-30', 'FR-456789012', 'actif'),
+('Thomas', 'Paul', 'paul.thomas@email.com', '+33656789012', '2024-03-05', '1985-07-18', 'FR-567890123', 'actif');
+
+-- TECHNICIENS
+INSERT INTO TECHNICIEN (nom, prenom, email, telephone, specialite, date_embauche) VALUES
+('Fontaine', 'Antoine', 'antoine.fontaine@ciaramobility.com', '+33612345000', 'Mécanique électrique', '2023-09-01'),
+('Garnier', 'Céline', 'celine.garnier@ciaramobility.com', '+33623456000', 'Électronique embarquée', '2023-10-15'),
+('Rousseau', 'David', 'david.rousseau@ciaramobility.com', '+33634567000', 'Systèmes de batteries', '2023-11-01');
+
+-- VÉHICULES (extrait du CSV - les 50 premiers)
+INSERT INTO VEHICULE (type_vehicule, marque, modele, immatriculation, statut, autonomie_km, niveau_batterie, date_mise_service, id_station_actuelle) VALUES
+('voiture', 'Kia', 'EV6', 'XR-964-LJ', 'en_maintenance', 320, 45, '2022-01-15', 7),
+('voiture', 'Kia', 'EV6', 'OY-932-RY', 'en_maintenance', 270, 42, '2024-03-20', 6),
+('voiture', 'Hyundai', 'Ioniq 5', 'BJ-663-FL', 'en_maintenance', 380, 38, '2022-06-10', 3),
+('voiture', 'Kia', 'EV6', 'MW-909-XP', 'en_maintenance', 480, 50, '2024-01-05', 8),
+('voiture', 'Mercedes', 'EQA', 'UN-317-LM', 'en_maintenance', 390, 41, '2021-11-25', 2),
+('voiture', 'Hyundai', 'Ioniq 5', 'PU-953-NB', 'en_maintenance', 330, 48, '2024-02-14', 8),
+('voiture', 'BMW', 'iX1', 'YO-412-AH', 'en_maintenance', 270, 35, '2024-04-08', 4),
+('voiture', 'Nissan', 'Leaf', 'SO-650-ZD', 'disponible', 270, 88, '2024-05-12', 2),
+('voiture', 'Toyota', 'Proace Electric', 'YE-805-LI', 'en_maintenance', 530, 52, '2023-07-19', 5),
+('voiture', 'Renault', 'Megane E-Tech', 'YE-951-QU', 'disponible', 550, 92, '2024-08-22', 8),
+('voiture', 'Citroen', 'Ami', 'WT-751-VN', 'disponible', 550, 95, '2024-09-10', 2),
+('voiture', 'Mercedes', 'EQB', 'OD-742-GO', 'en_maintenance', 420, 44, '2024-10-05', 4),
+('voiture', 'Volkswagen', 'ID.5', 'KO-197-KW', 'en_maintenance', 550, 39, '2022-11-18', 6),
+('voiture', 'Mercedes', 'EQA', 'KM-850-ZY', 'en_maintenance', 500, 46, '2022-12-22', 10),
+('voiture', 'Kia', 'Soul EV', 'TR-567-ZM', 'en_maintenance', 360, 37, '2024-01-30', 6),
+('voiture', 'Renault', 'Megane E-Tech', 'JR-526-BM', 'disponible', 590, 89, '2021-02-14', 3),
+('voiture', 'Citroen', 'Ami', 'XF-922-TM', 'en_maintenance', 340, 40, '2023-03-25', 7),
+('voiture', 'Tesla', 'Model 3', 'HU-769-AI', 'en_maintenance', 270, 47, '2022-04-16', 5),
+('voiture', 'Kia', 'Soul EV', 'IW-415-IT', 'en_location', 510, 72, '2022-05-20', NULL),
+('voiture', 'Mercedes', 'EQA', 'IL-910-WY', 'disponible', 500, 90, '2022-06-11', 1),
+('voiture', 'Mercedes', 'EQB', 'FF-812-UQ', 'en_maintenance', 330, 43, '2023-07-08', 6),
+('voiture', 'Toyota', 'Proace Electric', 'UD-673-OE', 'en_maintenance', 320, 49, '2024-08-19', 2),
+('voiture', 'Mercedes', 'EQA', 'AQ-685-JB', 'en_location', 420, 68, '2021-09-23', NULL),
+('voiture', 'Toyota', 'Proace Electric', 'PS-158-WM', 'en_maintenance', 290, 51, '2022-10-14', 3),
+('voiture', 'Nissan', 'Ariya', 'WN-898-EP', 'en_maintenance', 470, 45, '2021-11-07', 9),
+('voiture', 'Volkswagen', 'ID.4', 'XU-837-FD', 'disponible', 580, 93, '2023-12-01', 10),
+('voiture', 'Peugeot', 'e-308', 'ON-875-UO', 'en_maintenance', 320, 36, '2023-01-18', 3),
+('voiture', 'Toyota', 'Proace Electric', 'GO-836-IU', 'en_maintenance', 430, 48, '2023-02-25', 6),
+('voiture', 'Citroen', 'Ami', 'VE-965-UY', 'disponible', 480, 91, '2022-03-14', 2),
+('voiture', 'Hyundai', 'Ioniq 5', 'UE-921-ED', 'en_maintenance', 410, 46, '2024-04-22', 6),
+('voiture', 'Mercedes', 'EQA', 'YA-188-TY', 'en_maintenance', 450, 47, '2021-05-09', 5),
+('voiture', 'Citroen', 'Ami', 'HV-248-IT', 'en_location', 340, 70, '2023-06-17', NULL),
+('voiture', 'Hyundai', 'Ioniq 5', 'TZ-433-HF', 'en_maintenance', 500, 44, '2022-07-21', 7),
+('voiture', 'Fiat', '500e', 'NQ-819-BP', 'en_maintenance', 320, 38, '2021-08-30', 10),
+('voiture', 'Fiat', 'Panda EV', 'DW-525-FC', 'en_location', 540, 75, '2022-09-12', NULL),
+('voiture', 'Renault', 'Zoe', 'QC-782-KP', 'en_maintenance', 300, 50, '2023-10-28', 2),
+('voiture', 'BMW', 'iX1', 'UG-214-SA', 'en_location', 400, 65, '2022-11-15', NULL),
+('voiture', 'Mercedes', 'EQB', 'IT-929-YS', 'en_maintenance', 290, 41, '2021-12-03', 2),
+('voiture', 'Nissan', 'Leaf', 'TH-749-AC', 'en_location', 490, 73, '2022-01-27', NULL),
+('voiture', 'Tesla', 'Model 3', 'NC-394-CX', 'disponible', 390, 94, '2022-02-19', 1),
+('voiture', 'Volkswagen', 'ID.4', 'HX-598-OS', 'en_maintenance', 340, 42, '2023-03-08', 7),
+('voiture', 'Citroen', 'Berlingo EV', 'AN-441-ZU', 'disponible', 450, 87, '2023-04-14', 9),
+('voiture', 'Mercedes', 'EQE', 'QN-135-FB', 'en_maintenance', 520, 49, '2022-05-23', 5),
+('voiture', 'Fiat', '500e', 'ZO-456-RC', 'en_maintenance', 590, 40, '2024-06-30', 3),
+('voiture', 'Tesla', 'Model Y', 'HY-708-CY', 'en_maintenance', 450, 39, '2022-07-11', 10),
+('voiture', 'Hyundai', 'Kona Electric', 'AR-624-YF', 'en_maintenance', 560, 43, '2023-08-25', 8),
+('voiture', 'Citroen', 'e-C4', 'TW-514-GR', 'disponible', 420, 86, '2022-09-16', 5),
+('voiture', 'Toyota', 'bZ4X', 'SI-389-FD', 'disponible', 250, 85, '2021-10-04', 2),
+('voiture', 'Toyota', 'bZ4X', 'QI-180-WY', 'en_location', 320, 67, '2023-11-20', NULL),
+('voiture', 'Renault', 'Zoe', 'SW-740-DO', 'en_maintenance', 550, 37, '2024-12-12', 5);
+
+-- LOCATIONS
+INSERT INTO LOCATION (id_client, id_vehicule, id_station_depart, id_station_retour, date_debut, date_fin_prevue, date_fin_reelle, km_parcourus, statut_location) VALUES
+(1, 8, 2, 1, '2025-01-01 08:00:00', '2025-01-01 18:00:00', '2025-01-01 17:45:00', 145.5, 'terminee'),
+(2, 10, 8, 3, '2025-01-02 09:00:00', '2025-01-02 19:00:00', '2025-01-02 18:30:00', 230.8, 'terminee'),
+(3, 19, 4, NULL, '2025-01-06 08:00:00', '2025-01-06 20:00:00', NULL, NULL, 'en_cours'),
+(4, 23, 8, NULL, '2025-01-06 09:00:00', '2025-01-06 15:00:00', NULL, NULL, 'en_cours');
+
+-- PAIEMENTS
+INSERT INTO PAIEMENT (id_location, montant, date_paiement, mode_paiement, statut_paiement) VALUES
+(1, 85.00, '2025-01-01 17:50:00', 'carte_bancaire', 'valide'),
+(2, 95.00, '2025-01-02 18:35:00', 'paypal', 'valide'),
+(3, 85.00, '2025-01-06 08:05:00', 'carte_bancaire', 'en_attente'),
+(4, 51.00, '2025-01-06 09:05:00', 'google_pay', 'en_attente');
+
+-- MAINTENANCES
+INSERT INTO MAINTENANCE (id_vehicule, id_technicien, date_debut, date_fin, type_intervention, description, cout, statut_maintenance) VALUES
+(1, 1, '2025-01-04 08:00:00', NULL, 'Révision', 'Révision trimestrielle complète', 250.00, 'en_cours'),
+(2, 2, '2025-01-03 09:00:00', '2025-01-05 16:00:00', 'Réparation', 'Remplacement batterie', 850.00, 'terminee'),
+(3, 3, '2025-01-05 10:00:00', NULL, 'Diagnostic', 'Diagnostic système électronique', 180.00, 'en_cours');
+
+-- ============================================================
+-- PARTIE 3 : VUES
+-- ============================================================
+
+CREATE OR REPLACE VIEW vue_vehicules_disponibles AS
+SELECT 
+    v.id_vehicule,
+    v.type_vehicule,
+    v.marque,
+    v.modele,
+    v.immatriculation,
+    v.autonomie_km,
+    v.niveau_batterie,
+    s.nom_station,
+    s.ville
+FROM VEHICULE v
+LEFT JOIN STATION s ON v.id_station_actuelle = s.id_station
+WHERE v.statut = 'disponible'
+ORDER BY v.type_vehicule, v.niveau_batterie DESC;
+
+CREATE OR REPLACE VIEW vue_locations_actives AS
+SELECT 
+    l.id_location,
+    c.prenom || ' ' || c.nom AS client,
+    v.marque || ' ' || v.modele AS vehicule,
+    v.immatriculation,
+    sd.nom_station AS station_depart,
+    l.date_debut,
+    l.date_fin_prevue
+FROM LOCATION l
+INNER JOIN CLIENT c ON l.id_client = c.id_client
+INNER JOIN VEHICULE v ON l.id_vehicule = v.id_vehicule
+INNER JOIN STATION sd ON l.id_station_depart = sd.id_station
+WHERE l.statut_location = 'en_cours';
+
+-- ============================================================
+-- PARTIE 4 : TRIGGERS
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION trigger_update_vehicule_status_location()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF (TG_OP = 'INSERT' AND NEW.statut_location = 'en_cours') THEN
+        UPDATE VEHICULE 
+        SET statut = 'en_location', id_station_actuelle = NULL
+        WHERE id_vehicule = NEW.id_vehicule;
+    ELSIF (TG_OP = 'UPDATE' AND OLD.statut_location = 'en_cours' AND NEW.statut_location = 'terminee') THEN
+        UPDATE VEHICULE 
+        SET statut = 'disponible', id_station_actuelle = NEW.id_station_retour
+        WHERE id_vehicule = NEW.id_vehicule;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_update_vehicule_status
+    AFTER INSERT OR UPDATE ON LOCATION
+    FOR EACH ROW
+    EXECUTE FUNCTION trigger_update_vehicule_status_location();
