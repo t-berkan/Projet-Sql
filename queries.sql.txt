@@ -1,0 +1,75 @@
+-- 1. Utilisation de la vue : Liste des véhicules disponibles
+-- Cette requête utilise votre vue pour afficher les voitures prêtes à Lyon.
+SELECT marque, modele, niveau_batterie, nom_station
+FROM vue_vehicules_disponibles
+WHERE ville = 'Lyon';
+
+
+-- 2. Utilisation de la vue : Détails des locations en cours
+-- Permet de voir rapidement quels clients utilisent quel véhicule.
+SELECT client, immatriculation, station_depart
+FROM vue_locations_actives;
+
+
+-- 3. Chiffre d'affaires total par client (Agrégation & Jointure)
+SELECT c.nom, c.prenom, SUM(p.montant) || ' €' as total_depense
+FROM client c
+JOIN location l ON c.id_client = l.id_client
+JOIN paiement p ON l.id_location = p.id_location
+WHERE p.statut_paiement = 'valide'
+GROUP BY c.id_client, c.nom, c.prenom;
+
+
+-- 4. État de la flotte : Véhicules en maintenance par technicien
+SELECT t.nom as technicien, v.immatriculation, m.type_intervention, m.statut_maintenance
+FROM maintenance m
+JOIN vehicule v ON m.id_vehicule = v.id_vehicule
+JOIN technicien t ON m.id_technicien = t.id_technicien
+WHERE m.statut_maintenance = 'en_cours';
+
+
+-- 5. Statistiques : Nombre de bornes par station
+SELECT s.nom_station, COUNT(b.id_borne) as nb_bornes
+FROM station s
+LEFT JOIN borne_recharge b ON s.id_station = b.id_station
+GROUP BY s.nom_station
+ORDER BY nb_bornes DESC;
+
+
+-- 6. Analyse : Moyenne des kilomètres parcourus par trajet terminé
+SELECT ROUND(AVG(km_parcourus), 2) || ' km' as moyenne_distance
+FROM location
+WHERE statut_location = 'terminee';
+
+
+-- 7. Requête complexe : Clients n'ayant jamais effectué de location
+SELECT nom, prenom, email
+FROM client
+WHERE id_client NOT IN (SELECT id_client FROM location);
+
+
+-- 8. Requête de gestion : Top 3 des véhicules les plus sollicités
+SELECT v.marque, v.modele, COUNT(l.id_location) as nb_locations
+FROM vehicule v
+JOIN location l ON v.id_vehicule = l.id_vehicule
+GROUP BY v.id_vehicule, v.marque, v.modele
+ORDER BY nb_locations DESC
+LIMIT 3;
+
+
+-- 9. Analyse de la performance des techniciens (Jointure & Agrégation)
+-- Calcule le coût total des interventions par technicien pour évaluer le budget maintenance.
+SELECT t.nom, t.prenom, t.specialite, SUM(m.cout) as budget_total_interventions
+FROM technicien t
+JOIN maintenance m ON t.id_technicien = m.id_technicien
+GROUP BY t.id_technicien, t.nom, t.prenom, t.specialite
+ORDER BY budget_total_interventions DESC;
+
+
+-- 10. Taux d'utilisation des stations de départ (Statistiques métier)
+-- Identifie les stations les plus fréquentées pour optimiser la répartition de la flotte.
+SELECT s.nom_station, s.ville, COUNT(l.id_location) as nombre_de_departs
+FROM station s
+LEFT JOIN location l ON s.id_station = l.id_station_depart
+GROUP BY s.id_station, s.nom_station, s.ville
+ORDER BY nombre_de_departs DESC;
